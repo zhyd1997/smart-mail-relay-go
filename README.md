@@ -71,6 +71,10 @@ cd smart-mail-relay-go
    - Application type: Desktop application
    - Scopes: `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/gmail.send`
 5. Download the credentials and note the Client ID and Client Secret
+6. Add yourself as a test user:
+   - Go to Audience 
+   - Under 'Test users' click 'Add Users' 
+   - Add your email and click 'Save'
 
 ### 3. Get Refresh Token
 
