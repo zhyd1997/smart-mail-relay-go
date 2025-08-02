@@ -1,4 +1,4 @@
-package main
+package scheduler
 
 import (
 	"context"
@@ -8,17 +8,24 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
+
+	"smart-mail-relay-go/internal/config"
+	"smart-mail-relay-go/internal/fetcher"
+	"smart-mail-relay-go/internal/forwarder"
+	"smart-mail-relay-go/internal/metrics"
+	"smart-mail-relay-go/internal/models"
+	"smart-mail-relay-go/internal/parser"
 )
 
 // Scheduler manages the periodic email processing
 type Scheduler struct {
 	cron      *cron.Cron
 	entryID   cron.EntryID
-	config    *SchedulerConfig
-	fetcher   EmailFetcher
-	parser    *EmailParser
-	forwarder *EmailForwarder
-	metrics   *Metrics
+	config    *config.SchedulerConfig
+	fetcher   fetcher.EmailFetcher
+	parser    *parser.EmailParser
+	forwarder *forwarder.EmailForwarder
+	metrics   *metrics.Metrics
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
@@ -27,12 +34,12 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scheduler
-func NewScheduler(config *SchedulerConfig, fetcher EmailFetcher, parser *EmailParser, forwarder *EmailForwarder, metrics *Metrics) *Scheduler {
+func NewScheduler(cfg *config.SchedulerConfig, fetcher fetcher.EmailFetcher, parser *parser.EmailParser, forwarder *forwarder.EmailForwarder, metrics *metrics.Metrics) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Scheduler{
 		cron:      cron.New(cron.WithSeconds()),
-		config:    config,
+		config:    cfg,
 		fetcher:   fetcher,
 		parser:    parser,
 		forwarder: forwarder,
@@ -144,7 +151,7 @@ func (s *Scheduler) processEmails() {
 }
 
 // processEmail processes a single email
-func (s *Scheduler) processEmail(email EmailMessage) error {
+func (s *Scheduler) processEmail(email models.EmailMessage) error {
 	// Check if context is cancelled
 	select {
 	case <-s.ctx.Done():

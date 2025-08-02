@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"net/http"
@@ -9,18 +9,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+
+	"smart-mail-relay-go/internal/metrics"
+	"smart-mail-relay-go/internal/models"
+	"smart-mail-relay-go/internal/parser"
+	"smart-mail-relay-go/internal/scheduler"
 )
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
 	db        *gorm.DB
-	parser    *EmailParser
-	scheduler *Scheduler
-	metrics   *Metrics
+	parser    *parser.EmailParser
+	scheduler *scheduler.Scheduler
+	metrics   *metrics.Metrics
 }
 
 // NewHandlers creates new HTTP handlers
-func NewHandlers(db *gorm.DB, parser *EmailParser, scheduler *Scheduler, metrics *Metrics) *Handlers {
+func NewHandlers(db *gorm.DB, parser *parser.EmailParser, scheduler *scheduler.Scheduler, metrics *metrics.Metrics) *Handlers {
 	return &Handlers{
 		db:        db,
 		parser:    parser,
@@ -63,7 +68,7 @@ func (h *Handlers) SetupRoutes(router *gin.Engine) {
 
 // HealthCheck handles health check requests
 func (h *Handlers) HealthCheck(c *gin.Context) {
-	response := HealthResponse{
+	response := models.HealthResponse{
 		Status:    "ok",
 		Timestamp: time.Now(),
 		Database:  "ok",
@@ -105,7 +110,7 @@ func (h *Handlers) HealthCheck(c *gin.Context) {
 func (h *Handlers) GetRules(c *gin.Context) {
 	rules, err := h.parser.GetAllRules()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to fetch rules",
 			Code:    http.StatusInternalServerError,
@@ -114,9 +119,9 @@ func (h *Handlers) GetRules(c *gin.Context) {
 	}
 
 	// Convert to response format
-	var responses []ForwardRuleResponse
+	var responses []models.ForwardRuleResponse
 	for _, rule := range rules {
-		responses = append(responses, ForwardRuleResponse{
+		responses = append(responses, models.ForwardRuleResponse{
 			ID:          rule.ID,
 			Keyword:     rule.Keyword,
 			TargetEmail: rule.TargetEmail,
@@ -131,9 +136,9 @@ func (h *Handlers) GetRules(c *gin.Context) {
 
 // CreateRule creates a new forwarding rule
 func (h *Handlers) CreateRule(c *gin.Context) {
-	var req ForwardRuleRequest
+	var req models.ForwardRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "validation_error",
 			Message: "Invalid request body",
 			Code:    http.StatusBadRequest,
@@ -147,14 +152,14 @@ func (h *Handlers) CreateRule(c *gin.Context) {
 		enabled = *req.Enabled
 	}
 
-	rule := ForwardRule{
+	rule := models.ForwardRule{
 		Keyword:     req.Keyword,
 		TargetEmail: req.TargetEmail,
 		Enabled:     enabled,
 	}
 
 	if err := h.db.Create(&rule).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to create rule",
 			Code:    http.StatusInternalServerError,
@@ -162,7 +167,7 @@ func (h *Handlers) CreateRule(c *gin.Context) {
 		return
 	}
 
-	response := ForwardRuleResponse{
+	response := models.ForwardRuleResponse{
 		ID:          rule.ID,
 		Keyword:     rule.Keyword,
 		TargetEmail: rule.TargetEmail,
@@ -178,7 +183,7 @@ func (h *Handlers) CreateRule(c *gin.Context) {
 func (h *Handlers) GetRule(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "invalid_id",
 			Message: "Invalid rule ID",
 			Code:    http.StatusBadRequest,
@@ -186,17 +191,17 @@ func (h *Handlers) GetRule(c *gin.Context) {
 		return
 	}
 
-	var rule ForwardRule
+	var rule models.ForwardRule
 	if err := h.db.First(&rule, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, ErrorResponse{
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
 				Error:   "not_found",
 				Message: "Rule not found",
 				Code:    http.StatusNotFound,
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to fetch rule",
 			Code:    http.StatusInternalServerError,
@@ -204,7 +209,7 @@ func (h *Handlers) GetRule(c *gin.Context) {
 		return
 	}
 
-	response := ForwardRuleResponse{
+	response := models.ForwardRuleResponse{
 		ID:          rule.ID,
 		Keyword:     rule.Keyword,
 		TargetEmail: rule.TargetEmail,
@@ -220,7 +225,7 @@ func (h *Handlers) GetRule(c *gin.Context) {
 func (h *Handlers) UpdateRule(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "invalid_id",
 			Message: "Invalid rule ID",
 			Code:    http.StatusBadRequest,
@@ -228,9 +233,9 @@ func (h *Handlers) UpdateRule(c *gin.Context) {
 		return
 	}
 
-	var req ForwardRuleRequest
+	var req models.ForwardRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "validation_error",
 			Message: "Invalid request body",
 			Code:    http.StatusBadRequest,
@@ -238,17 +243,17 @@ func (h *Handlers) UpdateRule(c *gin.Context) {
 		return
 	}
 
-	var rule ForwardRule
+	var rule models.ForwardRule
 	if err := h.db.First(&rule, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, ErrorResponse{
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
 				Error:   "not_found",
 				Message: "Rule not found",
 				Code:    http.StatusNotFound,
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to fetch rule",
 			Code:    http.StatusInternalServerError,
@@ -264,7 +269,7 @@ func (h *Handlers) UpdateRule(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&rule).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to update rule",
 			Code:    http.StatusInternalServerError,
@@ -272,7 +277,7 @@ func (h *Handlers) UpdateRule(c *gin.Context) {
 		return
 	}
 
-	response := ForwardRuleResponse{
+	response := models.ForwardRuleResponse{
 		ID:          rule.ID,
 		Keyword:     rule.Keyword,
 		TargetEmail: rule.TargetEmail,
@@ -288,7 +293,7 @@ func (h *Handlers) UpdateRule(c *gin.Context) {
 func (h *Handlers) DeleteRule(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "invalid_id",
 			Message: "Invalid rule ID",
 			Code:    http.StatusBadRequest,
@@ -296,8 +301,8 @@ func (h *Handlers) DeleteRule(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Delete(&ForwardRule{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+	if err := h.db.Delete(&models.ForwardRule{}, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to delete rule",
 			Code:    http.StatusInternalServerError,
@@ -312,7 +317,7 @@ func (h *Handlers) DeleteRule(c *gin.Context) {
 func (h *Handlers) EnableRule(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "invalid_id",
 			Message: "Invalid rule ID",
 			Code:    http.StatusBadRequest,
@@ -320,8 +325,8 @@ func (h *Handlers) EnableRule(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Model(&ForwardRule{}).Where("id = ?", id).Update("enabled", true).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+	if err := h.db.Model(&models.ForwardRule{}).Where("id = ?", id).Update("enabled", true).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to enable rule",
 			Code:    http.StatusInternalServerError,
@@ -336,7 +341,7 @@ func (h *Handlers) EnableRule(c *gin.Context) {
 func (h *Handlers) DisableRule(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "invalid_id",
 			Message: "Invalid rule ID",
 			Code:    http.StatusBadRequest,
@@ -344,8 +349,8 @@ func (h *Handlers) DisableRule(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Model(&ForwardRule{}).Where("id = ?", id).Update("enabled", false).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+	if err := h.db.Model(&models.ForwardRule{}).Where("id = ?", id).Update("enabled", false).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to disable rule",
 			Code:    http.StatusInternalServerError,
@@ -370,12 +375,12 @@ func (h *Handlers) GetLogs(c *gin.Context) {
 
 	offset := (page - 1) * limit
 
-	var logs []ForwardLog
+	var logs []models.ForwardLog
 	var total int64
 
 	// Get total count
-	if err := h.db.Model(&ForwardLog{}).Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+	if err := h.db.Model(&models.ForwardLog{}).Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to count logs",
 			Code:    http.StatusInternalServerError,
@@ -385,7 +390,7 @@ func (h *Handlers) GetLogs(c *gin.Context) {
 
 	// Get logs with pagination
 	if err := h.db.Preload("Rule").Order("created_at DESC").Offset(offset).Limit(limit).Find(&logs).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to fetch logs",
 			Code:    http.StatusInternalServerError,
@@ -394,9 +399,9 @@ func (h *Handlers) GetLogs(c *gin.Context) {
 	}
 
 	// Convert to response format
-	var responses []ForwardLogResponse
+	var responses []models.ForwardLogResponse
 	for _, log := range logs {
-		response := ForwardLogResponse{
+		response := models.ForwardLogResponse{
 			ID:        log.ID,
 			MessageID: log.MessageID,
 			RuleID:    log.RuleID,
@@ -406,7 +411,7 @@ func (h *Handlers) GetLogs(c *gin.Context) {
 		}
 
 		if log.Rule != nil {
-			response.Rule = &ForwardRuleResponse{
+			response.Rule = &models.ForwardRuleResponse{
 				ID:          log.Rule.ID,
 				Keyword:     log.Rule.Keyword,
 				TargetEmail: log.Rule.TargetEmail,
@@ -433,7 +438,7 @@ func (h *Handlers) GetLogs(c *gin.Context) {
 func (h *Handlers) GetLog(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "invalid_id",
 			Message: "Invalid log ID",
 			Code:    http.StatusBadRequest,
@@ -441,17 +446,17 @@ func (h *Handlers) GetLog(c *gin.Context) {
 		return
 	}
 
-	var log ForwardLog
+	var log models.ForwardLog
 	if err := h.db.Preload("Rule").First(&log, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, ErrorResponse{
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
 				Error:   "not_found",
 				Message: "Log not found",
 				Code:    http.StatusNotFound,
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to fetch log",
 			Code:    http.StatusInternalServerError,
@@ -459,7 +464,7 @@ func (h *Handlers) GetLog(c *gin.Context) {
 		return
 	}
 
-	response := ForwardLogResponse{
+	response := models.ForwardLogResponse{
 		ID:        log.ID,
 		MessageID: log.MessageID,
 		RuleID:    log.RuleID,
@@ -469,7 +474,7 @@ func (h *Handlers) GetLog(c *gin.Context) {
 	}
 
 	if log.Rule != nil {
-		response.Rule = &ForwardRuleResponse{
+		response.Rule = &models.ForwardRuleResponse{
 			ID:          log.Rule.ID,
 			Keyword:     log.Rule.Keyword,
 			TargetEmail: log.Rule.TargetEmail,
@@ -485,7 +490,7 @@ func (h *Handlers) GetLog(c *gin.Context) {
 // StartScheduler starts the email processing scheduler
 func (h *Handlers) StartScheduler(c *gin.Context) {
 	if err := h.scheduler.Start(); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "scheduler_error",
 			Message: "Failed to start scheduler",
 			Code:    http.StatusInternalServerError,
@@ -502,7 +507,7 @@ func (h *Handlers) StartScheduler(c *gin.Context) {
 // StopScheduler stops the email processing scheduler
 func (h *Handlers) StopScheduler(c *gin.Context) {
 	if err := h.scheduler.Stop(); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "scheduler_error",
 			Message: "Failed to stop scheduler",
 			Code:    http.StatusInternalServerError,
@@ -519,7 +524,7 @@ func (h *Handlers) StopScheduler(c *gin.Context) {
 // RunOnce runs the email processing once
 func (h *Handlers) RunOnce(c *gin.Context) {
 	if err := h.scheduler.RunOnce(); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "scheduler_error",
 			Message: "Failed to run email processing",
 			Code:    http.StatusInternalServerError,

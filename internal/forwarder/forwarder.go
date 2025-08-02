@@ -1,4 +1,4 @@
-package main
+package forwarder
 
 import (
 	"context"
@@ -14,30 +14,33 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/sirupsen/logrus"
+
+	"smart-mail-relay-go/internal/config"
+	"smart-mail-relay-go/internal/models"
 )
 
 // EmailForwarder handles forwarding emails via Gmail API
 type EmailForwarder struct {
 	service   *gmail.Service
 	userEmail string
-	config    *GmailConfig
+	config    *config.GmailConfig
 }
 
 // NewEmailForwarder creates a new email forwarder
-func NewEmailForwarder(config *GmailConfig) (*EmailForwarder, error) {
+func NewEmailForwarder(cfg *config.GmailConfig) (*EmailForwarder, error) {
 	ctx := context.Background()
 
 	// Create OAuth2 config
 	oauth2Config := &oauth2.Config{
-		ClientID:     config.ClientID,
-		ClientSecret: config.ClientSecret,
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
 		Scopes:       []string{gmail.GmailSendScope},
 		Endpoint:     google.Endpoint,
 	}
 
 	// Create token source from refresh token
 	token := &oauth2.Token{
-		RefreshToken: config.RefreshToken,
+		RefreshToken: cfg.RefreshToken,
 	}
 
 	tokenSource := oauth2Config.TokenSource(ctx, token)
@@ -50,13 +53,13 @@ func NewEmailForwarder(config *GmailConfig) (*EmailForwarder, error) {
 
 	return &EmailForwarder{
 		service:   service,
-		userEmail: config.UserEmail,
-		config:    config,
+		userEmail: cfg.UserEmail,
+		config:    cfg,
 	}, nil
 }
 
 // ForwardEmail forwards an email to the target address
-func (f *EmailForwarder) ForwardEmail(ctx context.Context, originalEmail EmailMessage, targetEmail string) error {
+func (f *EmailForwarder) ForwardEmail(ctx context.Context, originalEmail models.EmailMessage, targetEmail string) error {
 	// Create the forwarded email
 	forwardedEmail, err := f.createForwardedEmail(originalEmail, targetEmail)
 	if err != nil {
@@ -99,7 +102,7 @@ func (f *EmailForwarder) ForwardEmail(ctx context.Context, originalEmail EmailMe
 }
 
 // createForwardedEmail creates a forwarded email with proper headers
-func (f *EmailForwarder) createForwardedEmail(original EmailMessage, targetEmail string) (string, error) {
+func (f *EmailForwarder) createForwardedEmail(original models.EmailMessage, targetEmail string) (string, error) {
 	var emailBuilder strings.Builder
 
 	// Add headers

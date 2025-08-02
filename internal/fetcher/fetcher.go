@@ -1,4 +1,4 @@
-package main
+package fetcher
 
 import (
 	"context"
@@ -17,11 +17,14 @@ import (
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message"
 	"github.com/sirupsen/logrus"
+
+	"smart-mail-relay-go/internal/config"
+	"smart-mail-relay-go/internal/models"
 )
 
 // EmailFetcher interface for fetching emails
 type EmailFetcher interface {
-	FetchNewEmails(ctx context.Context) ([]EmailMessage, error)
+	FetchNewEmails(ctx context.Context) ([]models.EmailMessage, error)
 	Close() error
 }
 
@@ -39,20 +42,20 @@ type IMAPFetcher struct {
 }
 
 // NewGmailAPIFetcher creates a new Gmail API fetcher
-func NewGmailAPIFetcher(config *GmailConfig) (*GmailAPIFetcher, error) {
+func NewGmailAPIFetcher(cfg *config.GmailConfig) (*GmailAPIFetcher, error) {
 	ctx := context.Background()
 
 	// Create OAuth2 config
 	oauth2Config := &oauth2.Config{
-		ClientID:     config.ClientID,
-		ClientSecret: config.ClientSecret,
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
 		Scopes:       []string{gmail.GmailReadonlyScope},
 		Endpoint:     google.Endpoint,
 	}
 
 	// Create token source from refresh token
 	token := &oauth2.Token{
-		RefreshToken: config.RefreshToken,
+		RefreshToken: cfg.RefreshToken,
 	}
 
 	tokenSource := oauth2Config.TokenSource(ctx, token)
@@ -65,21 +68,21 @@ func NewGmailAPIFetcher(config *GmailConfig) (*GmailAPIFetcher, error) {
 
 	return &GmailAPIFetcher{
 		service:   service,
-		userEmail: config.UserEmail,
+		userEmail: cfg.UserEmail,
 		lastCheck: time.Now().Add(-24 * time.Hour), // Start with emails from last 24 hours
 	}, nil
 }
 
 // NewIMAPFetcher creates a new IMAP fetcher
-func NewIMAPFetcher(config *GmailConfig) (*IMAPFetcher, error) {
+func NewIMAPFetcher(cfg *config.GmailConfig) (*IMAPFetcher, error) {
 	// Connect to IMAP server
-	c, err := client.DialTLS(fmt.Sprintf("%s:%d", config.IMAPHost, config.IMAPPort), nil)
+	c, err := client.DialTLS(fmt.Sprintf("%s:%d", cfg.IMAPHost, cfg.IMAPPort), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to IMAP server: %w", err)
 	}
 
 	// Login
-	if err := c.Login(config.IMAPUser, config.IMAPPassword); err != nil {
+	if err := c.Login(cfg.IMAPUser, cfg.IMAPPassword); err != nil {
 		c.Logout()
 		return nil, fmt.Errorf("failed to login to IMAP server: %w", err)
 	}
@@ -91,7 +94,7 @@ func NewIMAPFetcher(config *GmailConfig) (*IMAPFetcher, error) {
 }
 
 // FetchNewEmails fetches new emails using Gmail API
-func (f *GmailAPIFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, error) {
+func (f *GmailAPIFetcher) FetchNewEmails(ctx context.Context) ([]models.EmailMessage, error) {
 	query := fmt.Sprintf("after:%d", f.lastCheck.Unix())
 
 	// Search for new messages
@@ -101,7 +104,7 @@ func (f *GmailAPIFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, e
 		return nil, fmt.Errorf("failed to list messages: %w", err)
 	}
 
-	var emails []EmailMessage
+	var emails []models.EmailMessage
 
 	for _, msg := range response.Messages {
 		// Get full message details
@@ -125,8 +128,8 @@ func (f *GmailAPIFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, e
 }
 
 // parseGmailMessage parses a Gmail API message into EmailMessage
-func (f *GmailAPIFetcher) parseGmailMessage(msg *gmail.Message) (EmailMessage, error) {
-	email := EmailMessage{
+func (f *GmailAPIFetcher) parseGmailMessage(msg *gmail.Message) (models.EmailMessage, error) {
+	email := models.EmailMessage{
 		ID:      msg.Id,
 		Headers: make(map[string]string),
 	}
@@ -156,7 +159,7 @@ func (f *GmailAPIFetcher) parseGmailMessage(msg *gmail.Message) (EmailMessage, e
 }
 
 // parseGmailBody recursively parses Gmail message body parts
-func (f *GmailAPIFetcher) parseGmailBody(part *gmail.MessagePart, email *EmailMessage) error {
+func (f *GmailAPIFetcher) parseGmailBody(part *gmail.MessagePart, email *models.EmailMessage) error {
 	if part.Body != nil && part.Body.Data != "" {
 		data, err := base64.URLEncoding.DecodeString(part.Body.Data)
 		if err != nil {
@@ -192,7 +195,7 @@ func (f *GmailAPIFetcher) Close() error {
 }
 
 // FetchNewEmails fetches new emails using IMAP
-func (f *IMAPFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, error) {
+func (f *IMAPFetcher) FetchNewEmails(ctx context.Context) ([]models.EmailMessage, error) {
 	// Select INBOX
 	_, err := f.client.Select("INBOX", false)
 	if err != nil {
@@ -210,7 +213,7 @@ func (f *IMAPFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, error
 
 	if len(uids) == 0 {
 		f.lastCheck = time.Now()
-		return []EmailMessage{}, nil
+		return []models.EmailMessage{}, nil
 	}
 
 	// Fetch messages
@@ -224,7 +227,7 @@ func (f *IMAPFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, error
 		done <- f.client.Fetch(seqset, []imap.FetchItem{imap.FetchEnvelope, imap.FetchBody, imap.FetchUid}, messages)
 	}()
 
-	var emails []EmailMessage
+	var emails []models.EmailMessage
 
 	for msg := range messages {
 		email, err := f.parseIMAPMessage(msg)
@@ -244,8 +247,8 @@ func (f *IMAPFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, error
 }
 
 // parseIMAPMessage parses an IMAP message into EmailMessage
-func (f *IMAPFetcher) parseIMAPMessage(msg *imap.Message) (EmailMessage, error) {
-	email := EmailMessage{
+func (f *IMAPFetcher) parseIMAPMessage(msg *imap.Message) (models.EmailMessage, error) {
+	email := models.EmailMessage{
 		Headers: make(map[string]string),
 	}
 
@@ -270,7 +273,7 @@ func (f *IMAPFetcher) parseIMAPMessage(msg *imap.Message) (EmailMessage, error) 
 }
 
 // parseIMAPBody parses IMAP message body
-func (f *IMAPFetcher) parseIMAPBody(msg *imap.Message, email *EmailMessage) error {
+func (f *IMAPFetcher) parseIMAPBody(msg *imap.Message, email *models.EmailMessage) error {
 	if msg.Body == nil {
 		return nil
 	}

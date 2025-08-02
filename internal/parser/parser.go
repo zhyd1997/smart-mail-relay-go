@@ -1,4 +1,4 @@
-package main
+package parser
 
 import (
 	"fmt"
@@ -8,6 +8,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+
+	"smart-mail-relay-go/internal/models"
 )
 
 // EmailParser handles parsing and matching of email subjects
@@ -23,7 +25,7 @@ func NewEmailParser(db *gorm.DB) *EmailParser {
 }
 
 // ParseAndMatchEmail parses an email and finds matching forwarding rules
-func (p *EmailParser) ParseAndMatchEmail(email EmailMessage) (*ForwardRule, error) {
+func (p *EmailParser) ParseAndMatchEmail(email models.EmailMessage) (*models.ForwardRule, error) {
 	// Extract keyword from subject
 	keyword, err := p.extractKeyword(email.Subject)
 	if err != nil {
@@ -80,8 +82,8 @@ func (p *EmailParser) extractKeyword(subject string) (string, error) {
 }
 
 // findMatchingRule finds a forwarding rule that matches the given keyword
-func (p *EmailParser) findMatchingRule(keyword string) (*ForwardRule, error) {
-	var rule ForwardRule
+func (p *EmailParser) findMatchingRule(keyword string) (*models.ForwardRule, error) {
+	var rule models.ForwardRule
 
 	// First try exact match
 	result := p.db.Where("keyword = ? AND enabled = ?", keyword, true).First(&rule)
@@ -118,8 +120,8 @@ func (p *EmailParser) findMatchingRule(keyword string) (*ForwardRule, error) {
 }
 
 // GetAllRules returns all forwarding rules
-func (p *EmailParser) GetAllRules() ([]ForwardRule, error) {
-	var rules []ForwardRule
+func (p *EmailParser) GetAllRules() ([]models.ForwardRule, error) {
+	var rules []models.ForwardRule
 	result := p.db.Find(&rules)
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to get rules: %w", result.Error)
@@ -128,8 +130,8 @@ func (p *EmailParser) GetAllRules() ([]ForwardRule, error) {
 }
 
 // GetEnabledRules returns all enabled forwarding rules
-func (p *EmailParser) GetEnabledRules() ([]ForwardRule, error) {
-	var rules []ForwardRule
+func (p *EmailParser) GetEnabledRules() ([]models.ForwardRule, error) {
+	var rules []models.ForwardRule
 	result := p.db.Where("enabled = ?", true).Find(&rules)
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to get enabled rules: %w", result.Error)
@@ -139,7 +141,7 @@ func (p *EmailParser) GetEnabledRules() ([]ForwardRule, error) {
 
 // IsEmailProcessed checks if an email has already been processed
 func (p *EmailParser) IsEmailProcessed(messageID string) (bool, error) {
-	var processed ProcessedEmail
+	var processed models.ProcessedEmail
 	result := p.db.Where("message_id = ?", messageID).First(&processed)
 
 	if result.Error == nil {
@@ -155,7 +157,7 @@ func (p *EmailParser) IsEmailProcessed(messageID string) (bool, error) {
 
 // MarkEmailAsProcessed marks an email as processed
 func (p *EmailParser) MarkEmailAsProcessed(messageID string) error {
-	processed := ProcessedEmail{
+	processed := models.ProcessedEmail{
 		MessageID:   messageID,
 		ProcessedAt: time.Now(),
 	}
@@ -170,7 +172,7 @@ func (p *EmailParser) MarkEmailAsProcessed(messageID string) error {
 
 // LogForwardAttempt logs a forwarding attempt
 func (p *EmailParser) LogForwardAttempt(messageID string, ruleID *uint, status string, errorMsg string) error {
-	log := ForwardLog{
+	log := models.ForwardLog{
 		MessageID: messageID,
 		RuleID:    ruleID,
 		Status:    status,
