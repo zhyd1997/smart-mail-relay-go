@@ -14,7 +14,7 @@ import (
 	"smart-mail-relay-go/internal/forwarder"
 	"smart-mail-relay-go/internal/metrics"
 	"smart-mail-relay-go/internal/models"
-	"smart-mail-relay-go/internal/parser"
+	"smart-mail-relay-go/internal/services/parser"
 )
 
 // Scheduler manages the periodic email processing

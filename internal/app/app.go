@@ -17,9 +17,10 @@ import (
 	"smart-mail-relay-go/internal/forwarder"
 	"smart-mail-relay-go/internal/handlers"
 	"smart-mail-relay-go/internal/metrics"
-	"smart-mail-relay-go/internal/parser"
+	"smart-mail-relay-go/internal/repository"
+	"smart-mail-relay-go/internal/router"
 	"smart-mail-relay-go/internal/scheduler"
-	"smart-mail-relay-go/internal/server"
+	"smart-mail-relay-go/internal/services/parser"
 )
 
 // Run initializes and starts the application
@@ -59,7 +60,8 @@ func Run() error {
 		logrus.Info("Using Gmail API for email fetching")
 	}
 
-	p := parser.NewEmailParser(dbConn)
+	repo := repository.New(dbConn)
+	p := parser.NewEmailParser(repo)
 
 	fw, err := forwarder.NewEmailForwarder(&cfg.Gmail)
 	if err != nil {
@@ -69,10 +71,10 @@ func Run() error {
 	sched := scheduler.NewScheduler(&cfg.Scheduler, f, p, fw, m)
 
 	h := handlers.NewHandlers(dbConn, p, sched, m)
-	router := server.SetupRouter(h)
+	r := router.Setup(h)
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
-		Handler:      router,
+		Handler:      r,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
