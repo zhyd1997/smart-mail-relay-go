@@ -28,17 +28,13 @@ type Scheduler struct {
 
 // NewScheduler creates a new scheduler
 func NewScheduler(config *SchedulerConfig, fetcher EmailFetcher, parser *EmailParser, forwarder *EmailForwarder, metrics *Metrics) *Scheduler {
-	ctx, cancel := context.WithCancel(context.Background())
-
+	// context and cron will be initialized on Start to support restart
 	return &Scheduler{
-		cron:      cron.New(cron.WithSeconds()),
 		config:    config,
 		fetcher:   fetcher,
 		parser:    parser,
 		forwarder: forwarder,
 		metrics:   metrics,
-		ctx:       ctx,
-		cancel:    cancel,
 	}
 }
 
@@ -50,6 +46,12 @@ func (s *Scheduler) Start() error {
 	if s.isRunning {
 		return fmt.Errorf("scheduler is already running")
 	}
+
+	// create a fresh context to ensure previous cancellations do not persist
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+
+	// create a new cron scheduler to avoid stale entries when restarting
+	s.cron = cron.New(cron.WithSeconds())
 
 	// Schedule the job to run every N minutes
 	schedule := fmt.Sprintf("0 */%d * * * *", s.config.IntervalMinutes)
@@ -77,20 +79,27 @@ func (s *Scheduler) Stop() error {
 	}
 
 	// Cancel context to stop any running operations
-	s.cancel()
+	if s.cancel != nil {
+		s.cancel()
+	}
 
-	// Stop the cron scheduler
-	ctx := s.cron.Stop()
-
-	// Wait for all jobs to complete
-	select {
-	case <-ctx.Done():
-		logrus.Info("Scheduler stopped gracefully")
-	case <-time.After(30 * time.Second):
-		logrus.Warn("Scheduler stop timeout, forcing shutdown")
+	// Stop the cron scheduler and wait for jobs to finish
+	if s.cron != nil {
+		ctx := s.cron.Stop()
+		select {
+		case <-ctx.Done():
+			logrus.Info("Scheduler stopped gracefully")
+		case <-time.After(30 * time.Second):
+			logrus.Warn("Scheduler stop timeout, forcing shutdown")
+		}
 	}
 
 	s.isRunning = false
+	// Reset context and cron so Start can create fresh ones
+	s.ctx = nil
+	s.cancel = nil
+	s.cron = nil
+	s.entryID = 0
 	return nil
 }
 

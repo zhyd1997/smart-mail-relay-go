@@ -102,14 +102,21 @@ func (f *EmailForwarder) ForwardEmail(ctx context.Context, originalEmail EmailMe
 func (f *EmailForwarder) createForwardedEmail(original EmailMessage, targetEmail string) (string, error) {
 	var emailBuilder strings.Builder
 
+	boundary := fmt.Sprintf("smart-relay-%d", time.Now().UnixNano())
+
 	// Add headers
 	emailBuilder.WriteString(fmt.Sprintf("From: %s\r\n", f.userEmail))
 	emailBuilder.WriteString(fmt.Sprintf("To: %s\r\n", targetEmail))
 	emailBuilder.WriteString(fmt.Sprintf("Subject: Fwd: %s\r\n", original.Subject))
 	emailBuilder.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
 	emailBuilder.WriteString("MIME-Version: 1.0\r\n")
-	emailBuilder.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-	emailBuilder.WriteString("Content-Transfer-Encoding: 7bit\r\n")
+
+	if len(original.Attachments) > 0 {
+		emailBuilder.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n", boundary))
+	} else {
+		emailBuilder.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		emailBuilder.WriteString("Content-Transfer-Encoding: 7bit\r\n")
+	}
 
 	// Add original headers as references
 	if original.From != "" {
@@ -125,6 +132,13 @@ func (f *EmailForwarder) createForwardedEmail(original EmailMessage, targetEmail
 	emailBuilder.WriteString(fmt.Sprintf("X-Forwarded-At: %s\r\n", time.Now().Format(time.RFC3339)))
 
 	emailBuilder.WriteString("\r\n")
+
+	if len(original.Attachments) > 0 {
+		// Start multipart body
+		emailBuilder.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		emailBuilder.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		emailBuilder.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+	}
 
 	// Add forwarded content
 	emailBuilder.WriteString("---------- Forwarded message ----------\r\n")
@@ -144,11 +158,22 @@ func (f *EmailForwarder) createForwardedEmail(original EmailMessage, targetEmail
 	if original.Body != "" {
 		emailBuilder.WriteString(original.Body)
 	} else if original.HTMLBody != "" {
-		// Convert HTML to plain text (simple approach)
 		plainText := f.htmlToPlainText(original.HTMLBody)
 		emailBuilder.WriteString(plainText)
 	} else {
 		emailBuilder.WriteString("[No text content available]\r\n")
+	}
+
+	if len(original.Attachments) > 0 {
+		for _, att := range original.Attachments {
+			emailBuilder.WriteString(fmt.Sprintf("\r\n--%s\r\n", boundary))
+			emailBuilder.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", att.MIMEType, att.Filename))
+			emailBuilder.WriteString("Content-Transfer-Encoding: base64\r\n")
+			emailBuilder.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n\r\n", att.Filename))
+			encoded := base64.StdEncoding.EncodeToString(att.Data)
+			emailBuilder.WriteString(encoded)
+		}
+		emailBuilder.WriteString(fmt.Sprintf("\r\n--%s--\r\n", boundary))
 	}
 
 	return emailBuilder.String(), nil

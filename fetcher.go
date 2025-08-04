@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"strings"
 	"time"
 
@@ -127,8 +128,9 @@ func (f *GmailAPIFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, e
 // parseGmailMessage parses a Gmail API message into EmailMessage
 func (f *GmailAPIFetcher) parseGmailMessage(msg *gmail.Message) (EmailMessage, error) {
 	email := EmailMessage{
-		ID:      msg.Id,
-		Headers: make(map[string]string),
+		ID:          msg.Id,
+		Headers:     make(map[string]string),
+		Attachments: []Attachment{},
 	}
 
 	// Parse headers
@@ -147,17 +149,31 @@ func (f *GmailAPIFetcher) parseGmailMessage(msg *gmail.Message) (EmailMessage, e
 		}
 	}
 
-	// Parse body
-	if err := f.parseGmailBody(msg.Payload, &email); err != nil {
+	// Parse body and attachments
+	if err := f.parseGmailBody(msg.Id, msg.Payload, &email); err != nil {
 		return email, err
 	}
 
 	return email, nil
 }
 
-// parseGmailBody recursively parses Gmail message body parts
-func (f *GmailAPIFetcher) parseGmailBody(part *gmail.MessagePart, email *EmailMessage) error {
-	if part.Body != nil && part.Body.Data != "" {
+// parseGmailBody recursively parses Gmail message body parts and attachments
+func (f *GmailAPIFetcher) parseGmailBody(msgID string, part *gmail.MessagePart, email *EmailMessage) error {
+	if part.Filename != "" && part.Body != nil && part.Body.AttachmentId != "" {
+		att, err := f.service.Users.Messages.Attachments.Get(f.userEmail, msgID, part.Body.AttachmentId).Do()
+		if err != nil {
+			return fmt.Errorf("failed to get attachment: %w", err)
+		}
+		data, err := base64.URLEncoding.DecodeString(att.Data)
+		if err != nil {
+			return fmt.Errorf("failed to decode attachment: %w", err)
+		}
+		email.Attachments = append(email.Attachments, Attachment{
+			Filename: part.Filename,
+			MIMEType: part.MimeType,
+			Data:     data,
+		})
+	} else if part.Body != nil && part.Body.Data != "" {
 		data, err := base64.URLEncoding.DecodeString(part.Body.Data)
 		if err != nil {
 			return fmt.Errorf("failed to decode body data: %w", err)
@@ -176,7 +192,7 @@ func (f *GmailAPIFetcher) parseGmailBody(part *gmail.MessagePart, email *EmailMe
 	// Handle multipart messages
 	if part.Parts != nil {
 		for _, subPart := range part.Parts {
-			if err := f.parseGmailBody(subPart, email); err != nil {
+			if err := f.parseGmailBody(msgID, subPart, email); err != nil {
 				return err
 			}
 		}
@@ -246,7 +262,8 @@ func (f *IMAPFetcher) FetchNewEmails(ctx context.Context) ([]EmailMessage, error
 // parseIMAPMessage parses an IMAP message into EmailMessage
 func (f *IMAPFetcher) parseIMAPMessage(msg *imap.Message) (EmailMessage, error) {
 	email := EmailMessage{
-		Headers: make(map[string]string),
+		Headers:     make(map[string]string),
+		Attachments: []Attachment{},
 	}
 
 	if msg.Envelope != nil {
@@ -286,8 +303,56 @@ func (f *IMAPFetcher) parseIMAPBody(msg *imap.Message, email *EmailMessage) erro
 		return fmt.Errorf("failed to read message: %w", err)
 	}
 
-	// Parse multipart message
+	return f.parseIMAPEntity(entity, email)
+}
+
+// parseIMAPEntity parses a message entity recursively, capturing attachments
+func (f *IMAPFetcher) parseIMAPEntity(entity *message.Entity, email *EmailMessage) error {
 	if mr := entity.MultipartReader(); mr != nil {
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("failed to read part: %w", err)
+			}
+			if err := f.parseIMAPPart(part, email); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	data, err := io.ReadAll(entity.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read message body: %w", err)
+	}
+	contentType := entity.Header.Get("Content-Type")
+	disposition := entity.Header.Get("Content-Disposition")
+	if strings.Contains(disposition, "attachment") || (!strings.Contains(contentType, "text/plain") && !strings.Contains(contentType, "text/html")) {
+		filename := "attachment"
+		if _, params, err := mime.ParseMediaType(disposition); err == nil {
+			if name := params["filename"]; name != "" {
+				filename = name
+			}
+		}
+		email.Attachments = append(email.Attachments, Attachment{
+			Filename: filename,
+			MIMEType: contentType,
+			Data:     data,
+		})
+	} else if strings.Contains(contentType, "text/plain") {
+		email.Body = string(data)
+	} else if strings.Contains(contentType, "text/html") {
+		email.HTMLBody = string(data)
+	}
+	return nil
+}
+
+// parseIMAPPart handles a single multipart part recursively
+func (f *IMAPFetcher) parseIMAPPart(part *message.Entity, email *EmailMessage) error {
+	if mr := part.MultipartReader(); mr != nil {
 		for {
 			p, err := mr.NextPart()
 			if err == io.EOF {
@@ -296,34 +361,36 @@ func (f *IMAPFetcher) parseIMAPBody(msg *imap.Message, email *EmailMessage) erro
 			if err != nil {
 				return fmt.Errorf("failed to read part: %w", err)
 			}
-
-			content, err := io.ReadAll(p.Body)
-			if err != nil {
-				return fmt.Errorf("failed to read part body: %w", err)
-			}
-
-			contentType := p.Header.Get("Content-Type")
-			if strings.Contains(contentType, "text/plain") {
-				email.Body = string(content)
-			} else if strings.Contains(contentType, "text/html") {
-				email.HTMLBody = string(content)
+			if err := f.parseIMAPPart(p, email); err != nil {
+				return err
 			}
 		}
-	} else {
-		// Single part message
-		content, err := io.ReadAll(entity.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read message body: %w", err)
-		}
-
-		contentType := entity.Header.Get("Content-Type")
-		if strings.Contains(contentType, "text/plain") {
-			email.Body = string(content)
-		} else if strings.Contains(contentType, "text/html") {
-			email.HTMLBody = string(content)
-		}
+		return nil
 	}
 
+	content, err := io.ReadAll(part.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read part body: %w", err)
+	}
+	contentType := part.Header.Get("Content-Type")
+	disposition := part.Header.Get("Content-Disposition")
+	if strings.Contains(disposition, "attachment") || (!strings.Contains(contentType, "text/plain") && !strings.Contains(contentType, "text/html")) {
+		filename := "attachment"
+		if _, params, err := mime.ParseMediaType(disposition); err == nil {
+			if name := params["filename"]; name != "" {
+				filename = name
+			}
+		}
+		email.Attachments = append(email.Attachments, Attachment{
+			Filename: filename,
+			MIMEType: contentType,
+			Data:     content,
+		})
+	} else if strings.Contains(contentType, "text/plain") {
+		email.Body = string(content)
+	} else if strings.Contains(contentType, "text/html") {
+		email.HTMLBody = string(content)
+	}
 	return nil
 }
 

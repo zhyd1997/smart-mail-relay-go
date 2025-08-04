@@ -56,16 +56,24 @@ func (ForwardLog) TableName() string {
 
 // EmailMessage represents an email message structure
 type EmailMessage struct {
-	ID       string            `json:"id"`
-	Subject  string            `json:"subject"`
-	From     string            `json:"from"`
-	To       []string          `json:"to"`
-	CC       []string          `json:"cc"`
-	BCC      []string          `json:"bcc"`
-	Body     string            `json:"body"`
-	HTMLBody string            `json:"html_body"`
-	Headers  map[string]string `json:"headers"`
-	Raw      []byte            `json:"raw"`
+	ID          string            `json:"id"`
+	Subject     string            `json:"subject"`
+	From        string            `json:"from"`
+	To          []string          `json:"to"`
+	CC          []string          `json:"cc"`
+	BCC         []string          `json:"bcc"`
+	Body        string            `json:"body"`
+	HTMLBody    string            `json:"html_body"`
+	Headers     map[string]string `json:"headers"`
+	Raw         []byte            `json:"raw"`
+	Attachments []Attachment      `json:"attachments"`
+}
+
+// Attachment represents an email attachment
+type Attachment struct {
+	Filename string `json:"filename"`
+	MIMEType string `json:"mime_type"`
+	Data     []byte `json:"data"`
 }
 
 // ForwardRuleRequest represents the request structure for creating/updating forward rules

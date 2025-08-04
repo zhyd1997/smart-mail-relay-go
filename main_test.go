@@ -98,6 +98,11 @@ func TestEmailMessageStructure(t *testing.T) {
 		Body:     "Test body",
 		HTMLBody: "<p>Test body</p>",
 		Headers:  make(map[string]string),
+		Attachments: []Attachment{{
+			Filename: "test.txt",
+			MIMEType: "text/plain",
+			Data:     []byte("content"),
+		}},
 	}
 
 	assert.Equal(t, "test-id", email.ID)
@@ -108,4 +113,6 @@ func TestEmailMessageStructure(t *testing.T) {
 	assert.Equal(t, "Test body", email.Body)
 	assert.Equal(t, "<p>Test body</p>", email.HTMLBody)
 	assert.NotNil(t, email.Headers)
+	assert.Len(t, email.Attachments, 1)
+	assert.Equal(t, "test.txt", email.Attachments[0].Filename)
 }
