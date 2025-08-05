@@ -35,8 +35,8 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/smart-mail-relay .
 
-# Copy configuration file
-COPY --from=builder /app/config/config.yaml ./config/
+# Copy example configuration file
+COPY --from=builder /app/config/config.yaml.example ./config/config.yaml
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app
