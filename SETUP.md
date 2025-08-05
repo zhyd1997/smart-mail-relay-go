@@ -92,6 +92,12 @@ curl http://localhost:8080/healthz
 
 # List forwarding rules (should be empty initially)
 curl http://localhost:8080/api/v1/rules
+
+# Start the scheduler
+curl -X POST http://localhost:8080/api/v1/scheduler/start
+
+# Check scheduler status
+curl http://localhost:8080/api/v1/scheduler/status
 ```
 
 ## Manual Setup (Without Docker)

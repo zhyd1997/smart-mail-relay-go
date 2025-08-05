@@ -26,11 +26,14 @@ smart-mail-relay-go/
 ├── internal/
 │   ├── database/                   # Database connection setup
 │   ├── handler/                    # HTTP handlers
+│   │   └── scheduler/              # Scheduler control endpoints
 │   ├── metrics/                    # Prometheus metrics
 │   ├── model/                      # GORM models
 │   ├── repository/                 # Data access layer
 │   ├── router/                     # Gin router
-│   └── service/                    # Mail and scheduler services
+│   └── service/                    # Application services
+│       ├── scheduler/              # Scheduler core and processing
+│       └── mail_service.go         # Mail service
 └── tools/
     └── get_token.go                # OAuth2 helper
 ```
@@ -39,9 +42,9 @@ smart-mail-relay-go/
 
 The service consists of several key components:
 
-- **Mail Service**: Fetches, parses, and forwards emails
-- **Scheduler Service**: Manages periodic processing cycles
-- **REST API**: Gin router with rule, log, and scheduler handlers
+- **Mail Service** (`internal/service/mail_service.go`): Fetches, parses, and forwards emails
+- **Scheduler Service** (`internal/service/scheduler`): Manages periodic processing cycles and email processing
+- **REST API** (`internal/handler`): Gin router with rule, log, and scheduler endpoints
 - **Database Layer**: MySQL with GORM for persistence
 - **Metrics**: Prometheus metrics for monitoring
 

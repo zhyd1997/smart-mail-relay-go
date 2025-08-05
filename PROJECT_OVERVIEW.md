@@ -17,11 +17,14 @@ smart-mail-relay-go/
 ├── internal/
 │   ├── database/                   # Database connection setup
 │   ├── handler/                    # HTTP handlers
+│   │   └── scheduler/              # Scheduler control endpoints
 │   ├── metrics/                    # Prometheus metrics
 │   ├── model/                      # GORM models
 │   ├── repository/                 # Data access layer
 │   ├── router/                     # Gin router
-│   └── service/                    # Mail and scheduler services
+│   └── service/                    # Application services
+│       ├── scheduler/              # Scheduler core and processing
+│       └── mail_service.go         # Mail service
 ├── tools/
 │   └── get_token.go                # OAuth2 token helper utility
 ├── docker-compose.yml              # Multi-service Docker setup
@@ -39,13 +42,14 @@ smart-mail-relay-go/
 - Supports Gmail API and IMAP
 - Includes idempotent processing and logging
 
-### 2. **Scheduler Service** (`internal/service/scheduler_service.go`)
+### 2. **Scheduler Service** (`internal/service/scheduler`)
 - Cron-based periodic processing
+- Email processing and retry handling
 - Configurable intervals and graceful shutdown
 - Manual trigger support
 
 ### 3. **REST API Layer** (`internal/router`, `internal/handler`)
-- Gin router mapping to rule, log, and scheduler handlers
+- Gin router mapping to rule, log, and scheduler handlers (`internal/handler/scheduler`)
 - Health check and metrics endpoints
 - Comprehensive error handling
 

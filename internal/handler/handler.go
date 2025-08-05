@@ -9,20 +9,22 @@ import (
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
+	schedulerHandler "smart-mail-relay-go/internal/handler/scheduler"
 	metricsPkg "smart-mail-relay-go/internal/metrics"
-	"smart-mail-relay-go/internal/service"
+	service "smart-mail-relay-go/internal/service"
+	schedulerSvc "smart-mail-relay-go/internal/service/scheduler"
 )
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
 	db        *gorm.DB
 	parser    *service.EmailParser
-	scheduler *service.Scheduler
+	scheduler *schedulerSvc.Scheduler
 	metrics   *metricsPkg.Metrics
 }
 
 // NewHandlers creates new HTTP handlers
-func NewHandlers(db *gorm.DB, parser *service.EmailParser, scheduler *service.Scheduler, metrics *metricsPkg.Metrics) *Handlers {
+func NewHandlers(db *gorm.DB, parser *service.EmailParser, scheduler *schedulerSvc.Scheduler, metrics *metricsPkg.Metrics) *Handlers {
 	return &Handlers{
 		db:        db,
 		parser:    parser,
@@ -49,10 +51,10 @@ func (h *Handlers) SetupRoutes(router *gin.Engine) {
 		api.GET("/logs", h.GetLogs)
 		api.GET("/logs/:id", h.GetLog)
 
-		api.POST("/scheduler/start", h.StartScheduler)
-		api.POST("/scheduler/stop", h.StopScheduler)
-		api.POST("/scheduler/run-once", h.RunOnce)
-		api.GET("/scheduler/status", h.GetSchedulerStatus)
+		api.POST("/scheduler/start", schedulerHandler.Start(h.scheduler))
+		api.POST("/scheduler/stop", schedulerHandler.Stop(h.scheduler))
+		api.POST("/scheduler/run-once", schedulerHandler.RunOnce(h.scheduler))
+		api.GET("/scheduler/status", schedulerHandler.Status(h.scheduler))
 	}
 }
 
