@@ -13,16 +13,37 @@ A Go-based email forwarding service that automatically forwards emails based on 
 - **Graceful Shutdown**: Proper signal handling and cleanup
 - **Docker Support**: Complete containerization with docker-compose
 
+## Project Structure
+
+```
+smart-mail-relay-go/
+├── cmd/
+│   └── api/
+│       └── main.go                 # Entry point
+├── config/
+│   ├── config.go                   # Viper configuration
+│   └── config.yaml.example         # Sample configuration
+├── internal/
+│   ├── database/                   # Database connection setup
+│   ├── handler/                    # HTTP handlers
+│   ├── metrics/                    # Prometheus metrics
+│   ├── model/                      # GORM models
+│   ├── repository/                 # Data access layer
+│   ├── router/                     # Gin router
+│   └── service/                    # Mail and scheduler services
+└── tools/
+    └── get_token.go                # OAuth2 helper
+```
+
 ## Architecture
 
 The service consists of several key components:
 
-- **Email Fetcher**: Retrieves emails from Gmail (API or IMAP)
-- **Email Parser**: Extracts keywords and matches against rules
-- **Email Forwarder**: Sends emails via Gmail API
-- **Scheduler**: Manages periodic processing cycles
-- **HTTP Server**: REST API and health endpoints
-- **Database**: MySQL with GORM for data persistence
+- **Mail Service**: Fetches, parses, and forwards emails
+- **Scheduler Service**: Manages periodic processing cycles
+- **REST API**: Gin router with rule, log, and scheduler handlers
+- **Database Layer**: MySQL with GORM for persistence
+- **Metrics**: Prometheus metrics for monitoring
 
 ## Database Schema
 
@@ -157,7 +178,15 @@ SCHEDULER_INTERVAL_MINUTES=5
 SCHEDULER_MAX_RETRIES=3
 ```
 
-### 5. Start the Service
+### 5. Configure Application (Optional)
+
+Copy the sample configuration file and modify it if needed:
+
+```bash
+cp config/config.yaml.example config/config.yaml
+```
+
+### 6. Start the Service
 
 ```bash
 # Start all services
@@ -167,7 +196,7 @@ docker-compose up -d
 docker-compose logs -f app
 ```
 
-### 6. Verify Installation
+### 7. Verify Installation
 
 ```bash
 # Health check
@@ -319,7 +348,7 @@ Returns Prometheus metrics including:
 
 ### Configuration File
 
-The service also supports a `config.yaml` file for configuration. Environment variables take precedence over the config file.
+The service also supports a `config/config.yaml` file for configuration. Copy `config/config.yaml.example` to `config/config.yaml`. Environment variables take precedence over the config file.
 
 ## Monitoring
 
@@ -346,7 +375,7 @@ A Grafana instance is included in docker-compose for metrics visualization. Acce
 go mod download
 
 # Run locally (requires MySQL)
-go run .
+go run ./cmd/api
 
 # Run tests
 go test ./...
@@ -356,7 +385,7 @@ go test ./...
 
 ```bash
 # Build binary
-go build -o smart-mail-relay .
+go build -o smart-mail-relay ./cmd/api
 
 # Build Docker image
 docker build -t smart-mail-relay .

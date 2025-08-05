@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o smart-mail-relay .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o smart-mail-relay ./cmd/api
 
 # Final stage
 FROM alpine:latest
@@ -36,7 +36,7 @@ WORKDIR /app
 COPY --from=builder /app/smart-mail-relay .
 
 # Copy configuration file
-COPY --from=builder /app/config.yaml ./config/
+COPY --from=builder /app/config/config.yaml ./config/
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app

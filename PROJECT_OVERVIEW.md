@@ -8,66 +8,59 @@ This is a production-ready Go service that automatically forwards emails based o
 
 ```
 smart-mail-relay-go/
-├── main.go                 # Application entry point with graceful shutdown
-├── config.go              # Configuration management with Viper
-├── models.go              # GORM database models
-├── fetcher.go             # Email fetching (Gmail API + IMAP)
-├── parser.go              # Email parsing and keyword extraction
-├── forwarder.go           # Email forwarding via Gmail API
-├── scheduler.go           # Cron-based job scheduling
-├── handlers.go            # HTTP REST API handlers
-├── metrics.go             # Prometheus metrics collection
-├── main_test.go           # Unit tests
-├── config.yaml            # Configuration file
-├── docker-compose.yml     # Multi-service Docker setup
-├── Dockerfile             # Multi-stage Docker build
-├── init.sql               # Database initialization
-├── prometheus.yml         # Prometheus configuration
-├── Makefile               # Development and deployment tasks
-├── README.md              # Comprehensive documentation
-├── SETUP.md               # Step-by-step setup guide
-├── .gitignore             # Git ignore rules
-└── tools/
-    └── get_token.go       # OAuth2 token helper utility
+├── cmd/
+│   └── api/
+│       └── main.go                 # Application entry point
+├── config/
+│   ├── config.go                   # Viper configuration
+│   └── config.yaml.example         # Sample configuration
+├── internal/
+│   ├── database/                   # Database connection setup
+│   ├── handler/                    # HTTP handlers
+│   ├── metrics/                    # Prometheus metrics
+│   ├── model/                      # GORM models
+│   ├── repository/                 # Data access layer
+│   ├── router/                     # Gin router
+│   └── service/                    # Mail and scheduler services
+├── tools/
+│   └── get_token.go                # OAuth2 token helper utility
+├── docker-compose.yml              # Multi-service Docker setup
+├── Dockerfile                      # Multi-stage Docker build
+├── Makefile                        # Development and deployment tasks
+├── README.md                       # Comprehensive documentation
+├── SETUP.md                        # Step-by-step setup guide
+└── main_test.go                    # Unit tests
 ```
 
 ## 🏗️ Architecture Components
 
-### 1. **Email Fetcher** (`fetcher.go`)
-- **Gmail API Fetcher**: Uses OAuth2 for secure access
-- **IMAP Fetcher**: Alternative method using IMAP protocol
-- Supports both methods with configurable switching
-- Handles rate limiting and exponential backoff
+### 1. **Mail Service** (`internal/service/mail_service.go`)
+- Combines email fetching, parsing, and forwarding
+- Supports Gmail API and IMAP
+- Includes idempotent processing and logging
 
-### 2. **Email Parser** (`parser.go`)
-- Extracts keywords from email subjects
-- Pattern: `<keyword> - <recipient_name>`
-- Multiple matching strategies (exact, case-insensitive, partial)
-- Ensures idempotency with processed email tracking
-
-### 3. **Email Forwarder** (`forwarder.go`)
-- Forwards emails via Gmail API
-- Preserves original email structure and headers
-- HTML to plain text conversion
-- Retry logic with exponential backoff
-
-### 4. **Scheduler** (`scheduler.go`)
+### 2. **Scheduler Service** (`internal/service/scheduler_service.go`)
 - Cron-based periodic processing
-- Configurable intervals (default: 5 minutes)
-- Graceful shutdown handling
+- Configurable intervals and graceful shutdown
 - Manual trigger support
 
-### 5. **HTTP Server** (`handlers.go`)
-- RESTful API for rule management
-- Health check endpoints
-- Prometheus metrics endpoint
+### 3. **REST API Layer** (`internal/router`, `internal/handler`)
+- Gin router mapping to rule, log, and scheduler handlers
+- Health check and metrics endpoints
 - Comprehensive error handling
 
-### 6. **Database Layer** (`models.go`)
-- **forward_rules**: Email forwarding rules
-- **processed_emails**: Idempotency tracking
-- **forward_logs**: Audit trail and monitoring
-- GORM with MySQL support
+### 4. **Database Layer** (`internal/database`, `internal/repository`, `internal/model`)
+- Database connection management
+- GORM models and repository pattern
+- MySQL persistence
+
+### 5. **Metrics** (`internal/metrics`)
+- Prometheus metrics collection
+- Service monitoring and observability
+
+### 6. **Configuration** (`config`)
+- Viper-based configuration loading
+- Environment variable overrides
 
 ## 🗄️ Database Schema
 
@@ -203,7 +196,7 @@ docker-compose up -d
 
 ### 2. Manual Deployment
 ```bash
-go build -o smart-mail-relay .
+go build -o smart-mail-relay ./cmd/api
 ./smart-mail-relay
 ```
 
