@@ -66,7 +66,15 @@ SCHEDULER_INTERVAL_MINUTES=5
 SCHEDULER_MAX_RETRIES=3
 ```
 
-### 4. Start the Service
+### 4. Configure Application (Optional)
+
+Copy the sample configuration file and modify it if needed:
+
+```bash
+cp config/config.yaml.example config/config.yaml
+```
+
+### 5. Start the Service
 
 ```bash
 # Start all services (MySQL, App, Prometheus, Grafana)
@@ -76,7 +84,7 @@ docker-compose up -d
 docker-compose logs -f app
 ```
 
-### 5. Verify Installation
+### 6. Verify Installation
 
 ```bash
 # Health check
@@ -110,7 +118,7 @@ docker run --name mysql -e MYSQL_ROOT_PASSWORD=rootpassword \
 
 ### 3. Configure Database Connection
 
-Update the database configuration in `config.yaml` or set environment variables:
+Update the database configuration in `config/config.yaml` or set environment variables:
 
 ```bash
 export DB_HOST=localhost
@@ -123,7 +131,7 @@ export DB_NAME=smart_mail_relay
 ### 4. Run the Application
 
 ```bash
-go run .
+go run ./cmd/api
 ```
 
 ## API Usage Examples

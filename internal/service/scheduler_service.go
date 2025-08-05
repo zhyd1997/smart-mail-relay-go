@@ -1,4 +1,4 @@
-package main
+package service
 
 import (
 	"context"
@@ -8,17 +8,20 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
+
+	"smart-mail-relay-go/config"
+	metricsPkg "smart-mail-relay-go/internal/metrics"
 )
 
 // Scheduler manages the periodic email processing
 type Scheduler struct {
 	cron      *cron.Cron
 	entryID   cron.EntryID
-	config    *SchedulerConfig
+	config    *config.SchedulerConfig
 	fetcher   EmailFetcher
 	parser    *EmailParser
 	forwarder *EmailForwarder
-	metrics   *Metrics
+	metrics   *metricsPkg.Metrics
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
@@ -27,12 +30,12 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scheduler
-func NewScheduler(config *SchedulerConfig, fetcher EmailFetcher, parser *EmailParser, forwarder *EmailForwarder, metrics *Metrics) *Scheduler {
+func NewScheduler(cfg *config.SchedulerConfig, fetcher EmailFetcher, parser *EmailParser, forwarder *EmailForwarder, metrics *metricsPkg.Metrics) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Scheduler{
 		cron:      cron.New(cron.WithSeconds()),
-		config:    config,
+		config:    cfg,
 		fetcher:   fetcher,
 		parser:    parser,
 		forwarder: forwarder,

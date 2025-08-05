@@ -17,11 +17,11 @@ help:
 
 # Build the application
 build:
-	go build -o smart-mail-relay .
+        go build -o smart-mail-relay ./cmd/api
 
 # Run the application locally
 run:
-	go run .
+        go run ./cmd/api
 
 # Run tests
 test:
@@ -48,7 +48,7 @@ fmt:
 
 # Build Docker image
 docker-build:
-	docker build -t smart-mail-relay .
+        docker build -t smart-mail-relay .
 
 # Run with docker-compose
 docker-run:
@@ -64,11 +64,11 @@ docker-logs:
 
 # Get Gmail OAuth2 token
 get-token:
-	go run tools/get_token.go
+        go run tools/get_token.go
 
 # Database operations
 db-migrate:
-	go run . --migrate
+        go run ./cmd/api --migrate
 
 # Health check
 health:
@@ -93,7 +93,7 @@ dev-setup: deps fmt lint test
 
 # Production build
 prod-build:
-	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o smart-mail-relay .
+        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o smart-mail-relay ./cmd/api
 
 # Install development tools
 install-tools:

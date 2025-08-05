@@ -1,29 +1,33 @@
-package main
+package main_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	cfgPkg "smart-mail-relay-go/config"
+	"smart-mail-relay-go/internal/model"
+	"smart-mail-relay-go/internal/service"
 )
 
 func TestConfigValidation(t *testing.T) {
 	// Test valid configuration
-	config := &Config{
-		Server: ServerConfig{
+	config := &cfgPkg.Config{
+		Server: cfgPkg.ServerConfig{
 			Port: "8080",
 		},
-		Database: DatabaseConfig{
+		Database: cfgPkg.DatabaseConfig{
 			Host:   "localhost",
 			User:   "test",
 			DBName: "test",
 		},
-		Gmail: GmailConfig{
+		Gmail: cfgPkg.GmailConfig{
 			ClientID:     "test",
 			ClientSecret: "test",
 			RefreshToken: "test",
 		},
-		Scheduler: SchedulerConfig{
+		Scheduler: cfgPkg.SchedulerConfig{
 			IntervalMinutes: 5,
 		},
 	}
@@ -32,8 +36,8 @@ func TestConfigValidation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test invalid configuration
-	invalidConfig := &Config{
-		Server: ServerConfig{
+	invalidConfig := &cfgPkg.Config{
+		Server: cfgPkg.ServerConfig{
 			Port: "",
 		},
 	}
@@ -43,7 +47,7 @@ func TestConfigValidation(t *testing.T) {
 }
 
 func TestDatabaseDSN(t *testing.T) {
-	config := DatabaseConfig{
+	config := cfgPkg.DatabaseConfig{
 		Host:     "localhost",
 		Port:     3306,
 		User:     "testuser",
@@ -57,26 +61,26 @@ func TestDatabaseDSN(t *testing.T) {
 }
 
 func TestEmailParserExtractKeyword(t *testing.T) {
-	parser := &EmailParser{}
+	parser := service.NewEmailParser(nil)
 
 	// Test valid subject format
-	keyword, err := parser.extractKeyword("urgent - John Doe")
+	keyword, err := parser.ExtractKeyword("urgent - John Doe")
 	assert.NoError(t, err)
 	assert.Equal(t, "urgent", keyword)
 
 	// Test subject without dash
-	keyword, err = parser.extractKeyword("urgent message")
+	keyword, err = parser.ExtractKeyword("urgent message")
 	assert.NoError(t, err)
 	assert.Equal(t, "urgent", keyword)
 
 	// Test empty subject
-	keyword, err = parser.extractKeyword("")
+	keyword, err = parser.ExtractKeyword("")
 	assert.NoError(t, err)
 	assert.Equal(t, "", keyword)
 }
 
 func TestForwardRuleValidation(t *testing.T) {
-	rule := ForwardRule{
+	rule := model.ForwardRule{
 		Keyword:     "test",
 		TargetEmail: "test@example.com",
 		Enabled:     true,
@@ -90,7 +94,7 @@ func TestForwardRuleValidation(t *testing.T) {
 }
 
 func TestEmailMessageStructure(t *testing.T) {
-	email := EmailMessage{
+	email := service.EmailMessage{
 		ID:       "test-id",
 		Subject:  "Test Subject",
 		From:     "sender@example.com",
