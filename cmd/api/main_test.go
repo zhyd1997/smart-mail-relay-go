@@ -61,7 +61,7 @@ func TestDatabaseDSN(t *testing.T) {
 }
 
 func TestEmailParserExtractKeyword(t *testing.T) {
-	parser := &service.EmailParser{}
+	parser := service.NewEmailParser(nil)
 
 	// Test valid subject format
 	keyword, err := parser.ExtractKeyword("urgent - John Doe")
