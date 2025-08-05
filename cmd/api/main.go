@@ -15,7 +15,8 @@ import (
 	handlerPkg "smart-mail-relay-go/internal/handler"
 	metricsPkg "smart-mail-relay-go/internal/metrics"
 	"smart-mail-relay-go/internal/router"
-	"smart-mail-relay-go/internal/service"
+	service "smart-mail-relay-go/internal/service"
+	schedulerSvc "smart-mail-relay-go/internal/service/scheduler"
 )
 
 func main() {
@@ -71,7 +72,7 @@ func main() {
 	}
 
 	// Initialize scheduler
-	scheduler := service.NewScheduler(&cfg.Scheduler, fetcher, parser, forwarder, metrics)
+	scheduler := schedulerSvc.New(&cfg.Scheduler, fetcher, parser, forwarder, metrics)
 
 	// Initialize HTTP handlers
 	handlers := handlerPkg.NewHandlers(db, parser, scheduler, metrics)
